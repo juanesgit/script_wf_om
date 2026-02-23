@@ -256,14 +256,30 @@ def ensure_session(providers: dict[int, str], headless: bool) -> wf.requests.Ses
         return session
 
     log.info("Cookies expiradas o inválidas, iniciando login Selenium...")
-    wf.selenium_login_and_save_cookies(
-        base_url=URL_WORKFORCE,
-        usuario=USUARIO_WF,
-        clave=CLAVE_WF,
-        headless=headless,
-        chrome_path=CHROME_PATH or None,
-        chromedriver_path=CHROMEDRIVER_PATH or None,
-    )
+    try:
+        wf.selenium_login_and_save_cookies(
+            base_url=URL_WORKFORCE,
+            usuario=USUARIO_WF,
+            clave=CLAVE_WF,
+            headless=headless,
+            chrome_path=CHROME_PATH or None,
+            chromedriver_path=CHROMEDRIVER_PATH or None,
+        )
+    except Exception as e:
+        log.error("Selenium falló: %s", e)
+        log.error("")
+        log.error("═" * 60)
+        log.error("No se pudo hacer login con Selenium en este equipo.")
+        log.error("Esto es normal en servidores sin navegador o LXC/Docker.")
+        log.error("")
+        log.error("SOLUCIÓN: Ejecuta en tu PC local:")
+        log.error("  python script_wf_v2.py --login")
+        log.error("")
+        log.error("Luego copia las cookies al servidor:")
+        log.error("  scp cookies.json user_agent.txt root@SERVIDOR:~/script_wf_om/")
+        log.error("═" * 60)
+        sys.exit(1)
+
     session = wf.build_session(URL_WORKFORCE)
 
     if not wf.ensure_authenticated(session, URL_WORKFORCE, test_pid):
@@ -274,15 +290,43 @@ def ensure_session(providers: dict[int, str], headless: bool) -> wf.requests.Ses
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
+def do_login(headless: bool) -> None:
+    """Solo hace login Selenium y guarda cookies. Para usar desde PC local."""
+    log.info("Modo login: iniciando sesión en Workforce...")
+    wf.selenium_login_and_save_cookies(
+        base_url=URL_WORKFORCE,
+        usuario=USUARIO_WF,
+        clave=CLAVE_WF,
+        headless=headless,
+        chrome_path=CHROME_PATH or None,
+        chromedriver_path=CHROMEDRIVER_PATH or None,
+    )
+    log.info("Login exitoso. Archivos generados:")
+    log.info("  - %s", wf.COOKIES_FILE)
+    log.info("  - %s", wf.USER_AGENT_FILE)
+    print("\n✓ Login exitoso. Cookies guardadas.")
+    print("\nPara copiar al servidor:")
+    print(f"  scp {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} root@SERVIDOR:~/script_wf_om/")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Workforce O&M - Descarga y carga vía HTTP")
     parser.add_argument("--discover", action="store_true", help="Solo descubrir provider_ids y salir")
+    parser.add_argument("--login", action="store_true", help="Solo hacer login y guardar cookies (para PC local)")
     parser.add_argument("--days", type=int, default=None, help="Días a descargar (override de .env)")
     parser.add_argument("--headless", type=int, default=None, help="0=Chrome visible, 1=headless")
     args = parser.parse_args()
 
     headless = HEADLESS if args.headless is None else (args.headless == 1)
     days = args.days if args.days is not None else DAYS
+
+    # Modo login: solo hacer login y guardar cookies
+    if args.login:
+        if not USUARIO_WF or not CLAVE_WF:
+            log.error("Credenciales de Workforce no configuradas. Revisa el .env")
+            sys.exit(1)
+        do_login(headless)
+        return
 
     log.info("=" * 60)
     log.info("Workforce O&M v2 - Inicio")
