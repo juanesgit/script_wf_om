@@ -106,8 +106,6 @@ def _create_chrome(
     options.add_argument("--disable-extensions")
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-software-rasterizer")
-    if os.name != "nt":
-        options.add_argument("--single-process")
     try:
         ud = _prepare_chrome_data_dir()
         options.add_argument(f"--user-data-dir={ud}")
