@@ -105,27 +105,32 @@ def _create_chrome(
     options.add_argument("--disable-plugins")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--remote-debugging-port=0")
+    # En Linux, usar pipes en lugar de sockets TCP para DevTools
+    # (evita "CreatePlatformSocket() failed: Permission denied")
+    if os.name != "nt":
+        options.add_argument("--remote-debugging-pipe")
 
     if chrome_path and os.path.exists(chrome_path):
         options.binary_location = chrome_path
 
     # Intentar primero sin driver explícito (Selenium Manager)
     try:
-        driver = webdriver.Chrome(options=options)
+        svc = Service()
+        driver = webdriver.Chrome(service=svc, options=options)
         return driver
     except Exception:
         pass
 
     # Fallback con driver explícito
-    service = None
     if chromedriver_path and os.path.exists(chromedriver_path):
-        service = Service(chromedriver_path)
+        svc = Service(chromedriver_path)
     elif os.name != "nt":
         pth = shutil.which("chromedriver") or "chromedriver"
-        service = Service(pth)
+        svc = Service(pth)
+    else:
+        svc = Service()
 
-    driver = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(service=svc, options=options)
     return driver
 
 
