@@ -1,0 +1,9 @@
+.env
+cookies.json
+user_agent.txt
+providers_om.json
+downloads/
+*.log
+__pycache__/
+.venv/
+*.pyc
