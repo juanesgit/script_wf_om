@@ -104,13 +104,8 @@ def _create_chrome(
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-plugins")
     options.add_argument("--disable-extensions")
-    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-software-rasterizer")
-    try:
-        ud = _prepare_chrome_data_dir()
-        options.add_argument(f"--user-data-dir={ud}")
-    except Exception:
-        pass
+    options.add_argument("--remote-debugging-port=0")
 
     if chrome_path and os.path.exists(chrome_path):
         options.binary_location = chrome_path
