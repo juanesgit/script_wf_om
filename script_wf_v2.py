@@ -71,6 +71,11 @@ CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+SERVER_HOST = os.getenv("SERVER_HOST", "10.108.34.33")
+SERVER_PORT = os.getenv("SERVER_PORT", "2222")
+SERVER_USER = os.getenv("SERVER_USER", "root")
+SERVER_PATH = os.getenv("SERVER_PATH", "~/script_wf_om/")
+
 # Nombres de cubos O&M que se descargan (hoy y mañana)
 # Solo se usan si no hay PROVIDER_IDS en .env ni providers_om.json (auto-discovery)
 TARGET_CUBES = [
@@ -314,16 +319,54 @@ def do_login(headless: bool) -> None:
     print(f"  scp {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} root@SERVIDOR:~/script_wf_om/")
 
 
+def push_cookies_to_server() -> bool:
+    """Envía cookies.json y user_agent.txt al servidor vía SCP."""
+    import subprocess
+    files = [str(wf.COOKIES_FILE), str(wf.USER_AGENT_FILE)]
+    dest = f"{SERVER_USER}@{SERVER_HOST}:{SERVER_PATH}"
+    cmd = ["scp", "-P", SERVER_PORT] + files + [dest]
+    log.info("Enviando cookies al servidor: %s", " ".join(cmd))
+    print(f"\n↑ Enviando cookies a {SERVER_HOST}...")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            log.info("Cookies enviadas al servidor exitosamente")
+            print("✓ Cookies enviadas al servidor exitosamente!")
+            if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+                wf.send_telegram_alert(
+                    TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
+                    "✅ <b>Workforce O&M - Cookies Renovadas</b>\n\n"
+                    "Las cookies se actualizaron correctamente en el servidor.\n"
+                    "El cron continuará descargando datos normalmente."
+                )
+            return True
+        else:
+            log.error("SCP falló: %s", result.stderr.strip())
+            print(f"✗ Error enviando cookies: {result.stderr.strip()}")
+            print(f"\nEnvíalas manualmente:")
+            print(f"  scp -P {SERVER_PORT} {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} {dest}")
+            return False
+    except FileNotFoundError:
+        log.error("SCP no encontrado. Instala OpenSSH o envía las cookies manualmente.")
+        print("\n✗ SCP no encontrado en tu sistema.")
+        print(f"  Envíalas manualmente:")
+        print(f"  scp -P {SERVER_PORT} {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} {dest}")
+        return False
+    except subprocess.TimeoutExpired:
+        log.error("SCP timeout - verifica conexión al servidor")
+        print("\n✗ Timeout conectando al servidor.")
+        return False
+
+
 def do_manual_login(login_timeout: int) -> None:
-    """Abre Chrome visible para login manual con MFA. Captura cookies al detectar sesión."""
+    """Abre Chrome visible para login manual con MFA. Captura cookies y las envía al servidor."""
     wf.manual_login_and_save_cookies(
         base_url=URL_WORKFORCE,
         timeout=login_timeout,
         chrome_path=CHROME_PATH or None,
         chromedriver_path=CHROMEDRIVER_PATH or None,
     )
-    print("\nPara copiar al servidor:")
-    print(f"  scp {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} root@SERVIDOR:~/script_wf_om/")
+    push_cookies_to_server()
 
 
 def main():
