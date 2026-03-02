@@ -235,6 +235,65 @@ def selenium_login_and_save_cookies(
         driver.quit()
 
 
+def manual_login_and_save_cookies(
+    base_url: str,
+    timeout: int = 300,
+    chrome_path: Optional[str] = None,
+    chromedriver_path: Optional[str] = None,
+) -> None:
+    """
+    Abre Chrome VISIBLE para que el usuario haga login manualmente
+    (soporta MFA de Microsoft). Espera hasta detectar sesión activa
+    y luego guarda cookies y user-agent.
+    """
+    driver = _create_chrome(headless=False, chrome_path=chrome_path, chromedriver_path=chromedriver_path)
+    try:
+        url = _normalize_url(base_url)
+        log.info("[LOGIN-MANUAL] Abriendo %s", url)
+        log.info("[LOGIN-MANUAL] Haz login manualmente (incluyendo MFA).")
+        log.info("[LOGIN-MANUAL] Esperando hasta %d segundos a que completes el login...", timeout)
+        print("\n" + "=" * 60)
+        print("  CHROME ABIERTO - Haz login manualmente")
+        print("  (Incluye la doble autenticación de Microsoft)")
+        print("  El script capturará las cookies automáticamente")
+        print("  cuando detecte que ya estás dentro de Workforce.")
+        print("=" * 60 + "\n")
+
+        driver.get(url)
+
+        # Esperar a que el usuario complete el login y llegue al dashboard
+        # Detectamos esto buscando elementos que solo aparecen post-login
+        wait = WebDriverWait(driver, timeout, poll_frequency=2)
+        try:
+            wait.until(lambda d: (
+                # Botón "Vista" indica que estamos en el dashboard
+                d.find_elements(By.XPATH, "(//button[@title='Vista']//span)[2]")
+                # O la URL cambió a algo que indica sesión activa
+                or "etadirect.com" in d.current_url and "m=" in d.current_url
+            ))
+            log.info("[LOGIN-MANUAL] Login detectado, capturando cookies...")
+        except TimeoutException:
+            raise RuntimeError(
+                f"Timeout de {timeout}s esperando login manual. "
+                "Intenta de nuevo con --login-timeout <segundos>"
+            )
+
+        # Pequeña pausa para que se estabilicen las cookies
+        time.sleep(3)
+
+        # Guardar cookies y user-agent
+        cookies = driver.get_cookies()
+        COOKIES_FILE.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+        ua = driver.execute_script("return navigator.userAgent;")
+        USER_AGENT_FILE.write_text(ua or "", encoding="utf-8")
+        log.info("[LOGIN-MANUAL] Cookies y user-agent guardados")
+        print("\n✓ Cookies capturadas exitosamente!")
+        print(f"  - {COOKIES_FILE}")
+        print(f"  - {USER_AGENT_FILE}")
+    finally:
+        driver.quit()
+
+
 # ─── Auto-descubrimiento de Provider IDs ─────────────────────────────────────
 
 def discover_providers(

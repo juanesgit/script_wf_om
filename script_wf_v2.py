@@ -270,10 +270,10 @@ def ensure_session(providers: dict[int, str], headless: bool) -> wf.requests.Ses
         log.error("")
         log.error("═" * 60)
         log.error("No se pudo hacer login con Selenium en este equipo.")
-        log.error("Esto es normal en servidores sin navegador o LXC/Docker.")
         log.error("")
         log.error("SOLUCIÓN: Ejecuta en tu PC local:")
-        log.error("  python script_wf_v2.py --login")
+        log.error("  python script_wf_v2.py --login-manual")
+        log.error("  (Abre Chrome para login manual con MFA de Microsoft)")
         log.error("")
         log.error("Luego copia las cookies al servidor:")
         log.error("  scp cookies.json user_agent.txt root@SERVIDOR:~/script_wf_om/")
@@ -291,7 +291,7 @@ def ensure_session(providers: dict[int, str], headless: bool) -> wf.requests.Ses
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def do_login(headless: bool) -> None:
-    """Solo hace login Selenium y guarda cookies. Para usar desde PC local."""
+    """Solo hace login Selenium automático y guarda cookies."""
     log.info("Modo login: iniciando sesión en Workforce...")
     wf.selenium_login_and_save_cookies(
         base_url=URL_WORKFORCE,
@@ -309,10 +309,24 @@ def do_login(headless: bool) -> None:
     print(f"  scp {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} root@SERVIDOR:~/script_wf_om/")
 
 
+def do_manual_login(login_timeout: int) -> None:
+    """Abre Chrome visible para login manual con MFA. Captura cookies al detectar sesión."""
+    wf.manual_login_and_save_cookies(
+        base_url=URL_WORKFORCE,
+        timeout=login_timeout,
+        chrome_path=CHROME_PATH or None,
+        chromedriver_path=CHROMEDRIVER_PATH or None,
+    )
+    print("\nPara copiar al servidor:")
+    print(f"  scp {wf.COOKIES_FILE} {wf.USER_AGENT_FILE} root@SERVIDOR:~/script_wf_om/")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Workforce O&M - Descarga y carga vía HTTP")
     parser.add_argument("--discover", action="store_true", help="Solo descubrir provider_ids y salir")
-    parser.add_argument("--login", action="store_true", help="Solo hacer login y guardar cookies (para PC local)")
+    parser.add_argument("--login", action="store_true", help="Login automático y guardar cookies")
+    parser.add_argument("--login-manual", action="store_true", help="Login manual con MFA de Microsoft")
+    parser.add_argument("--login-timeout", type=int, default=300, help="Segundos de espera para login manual (default: 300)")
     parser.add_argument("--days", type=int, default=None, help="Días a descargar (override de .env)")
     parser.add_argument("--headless", type=int, default=None, help="0=Chrome visible, 1=headless")
     args = parser.parse_args()
@@ -320,7 +334,12 @@ def main():
     headless = HEADLESS if args.headless is None else (args.headless == 1)
     days = args.days if args.days is not None else DAYS
 
-    # Modo login: solo hacer login y guardar cookies
+    # Modo login manual: Chrome visible para MFA
+    if args.login_manual:
+        do_manual_login(args.login_timeout)
+        return
+
+    # Modo login automático: solo hacer login y guardar cookies
     if args.login:
         if not USUARIO_WF or not CLAVE_WF:
             log.error("Credenciales de Workforce no configuradas. Revisa el .env")
