@@ -68,6 +68,9 @@ STORED_PROCEDURE = os.getenv("STORED_PROCEDURE", "actualizar_wf_om")
 CHROME_PATH = os.getenv("CHROME_PATH", "")
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "")
 
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
 # Nombres de cubos O&M que se descargan (hoy y mañana)
 # Solo se usan si no hay PROVIDER_IDS en .env ni providers_om.json (auto-discovery)
 TARGET_CUBES = [
@@ -255,30 +258,32 @@ def ensure_session(providers: dict[int, str], headless: bool) -> wf.requests.Ses
         log.info("Sesión HTTP válida (cookies vigentes)")
         return session
 
-    log.info("Cookies expiradas o inválidas, iniciando login Selenium...")
-    try:
-        wf.selenium_login_and_save_cookies(
-            base_url=URL_WORKFORCE,
-            usuario=USUARIO_WF,
-            clave=CLAVE_WF,
-            headless=headless,
-            chrome_path=CHROME_PATH or None,
-            chromedriver_path=CHROMEDRIVER_PATH or None,
+    log.info("Cookies expiradas o inválidas.")
+
+    # Enviar alerta a Telegram
+    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        msg = (
+            "⚠️ <b>Workforce O&M - Cookies Expiradas</b>\n\n"
+            "Las cookies de sesión han expirado.\n"
+            "El cron NO descargará datos hasta renovarlas.\n\n"
+            "<b>Ejecuta en tu PC local:</b>\n"
+            "<code>python script_wf_v2.py --login-manual</code>\n\n"
+            "<b>Luego copia al servidor:</b>\n"
+            "<code>scp -P 2222 cookies.json user_agent.txt root@10.108.34.33:~/script_wf_om/</code>"
         )
-    except Exception as e:
-        log.error("Selenium falló: %s", e)
-        log.error("")
-        log.error("═" * 60)
-        log.error("No se pudo hacer login con Selenium en este equipo.")
-        log.error("")
-        log.error("SOLUCIÓN: Ejecuta en tu PC local:")
-        log.error("  python script_wf_v2.py --login-manual")
-        log.error("  (Abre Chrome para login manual con MFA de Microsoft)")
-        log.error("")
-        log.error("Luego copia las cookies al servidor:")
-        log.error("  scp cookies.json user_agent.txt root@SERVIDOR:~/script_wf_om/")
-        log.error("═" * 60)
-        sys.exit(1)
+        wf.send_telegram_alert(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
+
+    log.error("═" * 60)
+    log.error("Cookies expiradas. Alerta enviada a Telegram.")
+    log.error("")
+    log.error("SOLUCIÓN: Ejecuta en tu PC local:")
+    log.error("  python script_wf_v2.py --login-manual")
+    log.error("  (Abre Chrome para login manual con MFA de Microsoft)")
+    log.error("")
+    log.error("Luego copia las cookies al servidor:")
+    log.error("  scp -P 2222 cookies.json user_agent.txt root@10.108.34.33:~/script_wf_om/")
+    log.error("═" * 60)
+    sys.exit(1)
 
     session = wf.build_session(URL_WORKFORCE)
 

@@ -525,6 +525,23 @@ def safe_get(
     raise RuntimeError(f"No se pudo obtener la URL tras {max_attempts} intentos")
 
 
+def send_telegram_alert(token: str, chat_id: str, message: str) -> bool:
+    """Envía un mensaje de alerta a un grupo/chat de Telegram."""
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+    try:
+        r = requests.post(url, json=payload, timeout=15)
+        if r.status_code == 200:
+            log.info("[TELEGRAM] Alerta enviada correctamente")
+            return True
+        else:
+            log.warning("[TELEGRAM] Error %d: %s", r.status_code, r.text[:200])
+            return False
+    except Exception as e:
+        log.warning("[TELEGRAM] No se pudo enviar alerta: %s", e)
+        return False
+
+
 def ensure_authenticated(
     session: requests.Session,
     base_url: str,
